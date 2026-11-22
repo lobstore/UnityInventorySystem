@@ -33,8 +33,8 @@ namespace LOGIYGames.Inventory
             var item = Slot.Item;
             var def = item.Data;
 
-            if (def is ConsumableItemDefinition)
-                list.Add(new ContextMenuAction("Использовать", UseItem));
+           // if (def is ConsumableItemDefinition)
+            //    list.Add(new ContextMenuAction("Использовать", UseItem));
 
             //if (def is WeaponDefinition || def is ArmorDefinition)
             //    list.Add(new ContextMenuAction("Экипировать", EquipItem));
