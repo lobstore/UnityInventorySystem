@@ -8,5 +8,12 @@
   "author": {
     "name": "LOGIYGames"
   },
-  "hideInEditor": false
+  "samples": [
+    {
+      "displayName": "UI Example",
+      "description": "UI Example",
+      "path": "Samples"
+    }
+  ],
+    "hideInEditor": false
 }
