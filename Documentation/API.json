@@ -1,0 +1,469 @@
+{
+  "contractVersion": "1.0.0",
+  "package": {
+    "name": "com.logiygames.inventory",
+    "displayName": "LOGIYGames Inventory",
+    "version": "0.1.0",
+    "unity": "6000.6",
+    "assembly": "LOGIYGames.Inventory",
+    "namespace": "LOGIYGames.Inventory"
+  },
+  "identityAndRules": {
+    "runtimeItemIdentity": "ItemDefinition ScriptableObject reference equality (asset object identity). Matching Id strings do not make two different asset instances stackable.",
+    "saveIdentity": "ItemDefinition.Id is intended as a stable unique key for save-game/external data. The package does not generate IDs or implement persistence.",
+    "stackRule": "One ItemSlot stores at most one item definition and up to ItemDefinition.MaxStackSize units.",
+    "amountRule": "ItemStack constructor clamps negative amounts to zero. Empty means Data is null or Amount <= 0. ItemSlot.SetItem clamps to the definition's MaxStackSize.",
+    "maxStackRule": "MaxStackSize is normalized to at least 1 in ItemDefinition.OnValidate and ItemStack.MaxStackSize.",
+    "mutationThread": "Inventory and UnityEvent operations are intended for Unity's main thread.",
+    "nonGoals": [
+      "No save/load implementation",
+      "No currency implementation",
+      "No automatic world drop or prefab spawning",
+      "No built-in item use/equipment rules",
+      "No network synchronization"
+    ]
+  },
+  "types": [
+    {
+      "name": "ItemDefinition",
+      "kind": "ScriptableObject",
+      "menu": "Inventory/Item/Data",
+      "fields": [
+        {
+          "name": "Id",
+          "type": "string",
+          "purpose": "Stable unique save key; caller assigns and preserves it."
+        },
+        {
+          "name": "DisplayName",
+          "type": "string",
+          "purpose": "Player-facing item name."
+        },
+        {
+          "name": "Description",
+          "type": "string",
+          "purpose": "Optional description; TextArea 2-6."
+        },
+        {
+          "name": "Icon",
+          "type": "Sprite",
+          "purpose": "Optional UI icon."
+        },
+        {
+          "name": "Prefab",
+          "type": "GameObject",
+          "purpose": "Optional world prefab for game-specific use."
+        },
+        {
+          "name": "MaxStackSize",
+          "type": "int",
+          "default": 1,
+          "minimum": 1,
+          "purpose": "Maximum units in one slot."
+        },
+        {
+          "name": "Sellable",
+          "type": "bool",
+          "default": true,
+          "purpose": "Permission flag for game-specific selling."
+        },
+        {
+          "name": "SellPrice",
+          "type": "int",
+          "default": 0,
+          "minimum": 0,
+          "purpose": "Price per unit; no currency system included."
+        },
+        {
+          "name": "Droppable",
+          "type": "bool",
+          "default": true,
+          "purpose": "Permission flag for game-specific dropping."
+        }
+      ],
+      "methods": [
+        {
+          "name": "OnValidate",
+          "signature": "private void OnValidate()",
+          "scope": "UNITY_EDITOR",
+          "purpose": "Clamps MaxStackSize to at least 1 and SellPrice to at least 0."
+        }
+      ]
+    },
+    {
+      "name": "ItemStack",
+      "kind": "Serializable struct",
+      "fields": [
+        {
+          "name": "Data",
+          "type": "ItemDefinition",
+          "purpose": "Definition asset reference; null means empty."
+        },
+        {
+          "name": "Amount",
+          "type": "int",
+          "purpose": "Unit count; public serializable field."
+        }
+      ],
+      "properties": [
+        {
+          "name": "IsEmpty",
+          "type": "bool",
+          "purpose": "Data == null or Amount <= 0."
+        },
+        {
+          "name": "MaxStackSize",
+          "type": "int",
+          "purpose": "Data != null ? max(1, Data.MaxStackSize) : 1."
+        },
+        {
+          "name": "Empty",
+          "type": "ItemStack",
+          "kind": "static",
+          "purpose": "Returns default empty stack."
+        }
+      ],
+      "constructors": [
+        {
+          "signature": "ItemStack(ItemDefinition data, int amount)",
+          "purpose": "Creates a stack and clamps amount at zero."
+        }
+      ],
+      "methods": [
+        {
+          "name": "CanStackWith",
+          "signature": "bool CanStackWith(ItemStack other)",
+          "purpose": "True only when both stacks are non-empty and Data references are identical."
+        },
+        {
+          "name": "Clone",
+          "signature": "ItemStack Clone()",
+          "purpose": "Returns a value copy."
+        },
+        {
+          "name": "WithAmount",
+          "signature": "ItemStack WithAmount(int amount)",
+          "purpose": "Returns a new stack with the same definition and a normalized amount."
+        },
+        {
+          "name": "ToString",
+          "signature": "override string ToString()",
+          "purpose": "Returns Empty or item name with quantity."
+        }
+      ]
+    },
+    {
+      "name": "ItemSlot",
+      "kind": "Serializable class",
+      "serializedFields": [
+        {
+          "name": "item",
+          "type": "ItemStack",
+          "access": "private serialized"
+        }
+      ],
+      "members": [
+        {
+          "name": "OnItemChanged",
+          "type": "UnityEvent",
+          "kind": "public event field",
+          "purpose": "Raised when definition or amount changes."
+        },
+        {
+          "name": "Item",
+          "type": "ItemStack",
+          "kind": "read-only property",
+          "purpose": "Current stack value copy."
+        },
+        {
+          "name": "IsEmpty",
+          "type": "bool",
+          "kind": "read-only property",
+          "purpose": "Whether current stack is empty."
+        }
+      ],
+      "methods": [
+        {
+          "name": "SetItem",
+          "signature": "void SetItem(ItemStack stack)",
+          "purpose": "Replaces contents; null/zero clears; quantity is clamped to one slot capacity; emits OnItemChanged only when content differs."
+        },
+        {
+          "name": "Clear",
+          "signature": "void Clear()",
+          "purpose": "Clears slot using SetItem(default)."
+        },
+        {
+          "name": "TryAdd",
+          "signature": "int TryAdd(ItemStack stack)",
+          "purpose": "Adds as much as possible; returns remainder. Empty input returns zero; incompatible/full slot returns full input amount."
+        },
+        {
+          "name": "SwapWith",
+          "signature": "void SwapWith(ItemSlot other)",
+          "purpose": "Exchanges slot contents and notifies both changed slots. Null/self ignored."
+        }
+      ]
+    },
+    {
+      "name": "InventoryController",
+      "kind": "MonoBehaviour",
+      "serializedFields": [
+        {
+          "name": "slots",
+          "type": "List<ItemSlot>",
+          "access": "private serialized",
+          "purpose": "Ordered fixed slot list configured in Inspector."
+        }
+      ],
+      "properties": [
+        {
+          "name": "Slots",
+          "type": "IReadOnlyList<ItemSlot>",
+          "purpose": "Read-only slot collection."
+        },
+        {
+          "name": "IsFull",
+          "type": "bool",
+          "purpose": "True when FindEmptySlot returns -1."
+        }
+      ],
+      "events": [
+        {
+          "name": "OnItemUsed",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Game-specific item use event; core inventory does not invoke it automatically."
+        },
+        {
+          "name": "OnItemEquipped",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Game-specific equip event."
+        },
+        {
+          "name": "OnItemSold",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Game-specific sale event."
+        },
+        {
+          "name": "OnItemDropped",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Game-specific drop event."
+        },
+        {
+          "name": "OnItemDiscarded",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Game-specific discard event."
+        },
+        {
+          "name": "OnItemAdded",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Invoked after add with accepted quantity."
+        },
+        {
+          "name": "OnItemRemoved",
+          "type": "UnityEvent<ItemStack>",
+          "purpose": "Invoked after removal with actual quantity. Clear emits once per previous slot stack."
+        }
+      ],
+      "methods": [
+        {
+          "name": "IsValidIndex",
+          "signature": "bool IsValidIndex(int index)",
+          "returns": "false for out-of-range index."
+        },
+        {
+          "name": "GetSlot",
+          "signature": "ItemSlot GetSlot(int index)",
+          "returns": "Slot or null when invalid."
+        },
+        {
+          "name": "FindSlot",
+          "signature": "int FindSlot(ItemDefinition data)",
+          "returns": "First matching non-empty slot; -1 if missing/null."
+        },
+        {
+          "name": "FindEmptySlot",
+          "signature": "int FindEmptySlot()",
+          "returns": "First empty slot; -1 if full."
+        },
+        {
+          "name": "CountItem",
+          "signature": "int CountItem(ItemDefinition data)",
+          "returns": "Total quantity; zero for null definition."
+        },
+        {
+          "name": "ContainsItem",
+          "signature": "bool ContainsItem(ItemDefinition data, int amount = 1)",
+          "returns": "True when valid data and amount >= 0 and count >= amount."
+        },
+        {
+          "name": "CanFit",
+          "signature": "bool CanFit(ItemStack stack)",
+          "returns": "Whether full stack fits into matching partial stacks plus empty slots; no mutation."
+        },
+        {
+          "name": "AddItem",
+          "signature": "int AddItem(ItemStack stack)",
+          "returns": "Quantity not accepted. Fills matching partial stacks, then empty slots."
+        },
+        {
+          "name": "AddItem",
+          "signature": "int AddItem(ItemDefinition data, int amount)",
+          "returns": "Delegates to ItemStack overload; returns remainder."
+        },
+        {
+          "name": "RemoveItem",
+          "signature": "bool RemoveItem(ItemDefinition data, int amount)",
+          "returns": "All-or-nothing removal across matching slots from last to first."
+        },
+        {
+          "name": "RemoveFromSlot",
+          "signature": "bool RemoveFromSlot(int index, int amount)",
+          "returns": "Removes up to amount from one slot; requested amount clamps to slot quantity."
+        },
+        {
+          "name": "RemoveAll",
+          "signature": "int RemoveAll(ItemDefinition data)",
+          "returns": "Removes all stacks of definition; returns removed count."
+        },
+        {
+          "name": "ClearSlot",
+          "signature": "void ClearSlot(int index)",
+          "returns": "Clears one valid non-empty slot and emits OnItemRemoved."
+        },
+        {
+          "name": "Clear",
+          "signature": "void Clear()",
+          "returns": "Clears all slots; emits OnItemRemoved per previous stack."
+        },
+        {
+          "name": "TryMove",
+          "signature": "bool TryMove(int fromIndex, int toIndex)",
+          "returns": "Moves to empty, merges if same definition or swaps if incompatible; remainder stays at source."
+        },
+        {
+          "name": "MoveToFirstAvailable",
+          "signature": "bool MoveToFirstAvailable(int fromIndex)",
+          "returns": "Tries first compatible partial stack, otherwise first empty slot; compatible merge may be partial."
+        },
+        {
+          "name": "SplitStack",
+          "signature": "bool SplitStack(int fromIndex, int amount)",
+          "returns": "Splits into first empty slot."
+        },
+        {
+          "name": "SplitStack",
+          "signature": "bool SplitStack(int fromIndex, int toIndex, int amount)",
+          "returns": "Splits to specified empty slot. Requires 0 < amount < source amount."
+        },
+        {
+          "name": "SwapSlots",
+          "signature": "bool SwapSlots(int a, int b)",
+          "returns": "Swaps contents of two valid distinct slots."
+        },
+        {
+          "name": "TransferTo",
+          "signature": "bool TransferTo(InventoryController target, int fromIndex, int amount)",
+          "returns": "Transfers as many as target accepts; removes only accepted quantity from source; false when none transferred."
+        },
+        {
+          "name": "AutoStack",
+          "signature": "void AutoStack()",
+          "returns": "Fills earlier compatible partial slots from later slots; emits slot-level events."
+        }
+      ],
+      "lifecycle": [
+        "Awake and editor OnValidate create missing slot objects for null list entries.",
+        "No runtime slot-count resize method is included. Configure slot count in the serialized slots list."
+      ]
+    }
+  ],
+  "sampleUiTypes": [
+    {
+      "name": "InventoryUIFactory",
+      "namespace": "LOGIYGames.Inventory",
+      "purpose": "Creates one ItemSlotView/Presenter per slot, handles drag/drop ghost/context menu, and owns/destroys only its generated views.",
+      "methods": [
+        "Create()",
+        "Dispose()"
+      ]
+    },
+    {
+      "name": "ItemSlotPresenter",
+      "purpose": "Connects one slot and view, exposes BuildContextActions and TryMoveTo."
+    },
+    {
+      "name": "ItemSlotView",
+      "purpose": "Implements Unity UI drag/drop and pointer click handlers; subscribes to ItemSlot.OnItemChanged.",
+      "methods": [
+        "Bind(ItemSlotPresenter)",
+        "Unbind()"
+      ]
+    },
+    {
+      "name": "ItemView",
+      "purpose": "Renders item icon and stack count.",
+      "methods": [
+        "SetItem(ItemStack)"
+      ]
+    },
+    {
+      "name": "ItemContextMenu",
+      "namespace": "LOGIYGames",
+      "purpose": "Pools context-menu buttons and invokes ContextMenuAction callbacks.",
+      "methods": [
+        "Setup(RectTransform, RectTransform, Button, Button)",
+        "Show(Vector2, IReadOnlyList<ContextMenuAction>)",
+        "Hide()"
+      ]
+    },
+    {
+      "name": "ContextMenuAction",
+      "namespace": "LOGIYGames",
+      "kind": "readonly struct",
+      "fields": [
+        "Label:string",
+        "Callback:Action",
+        "Interactable:bool"
+      ]
+    },
+    {
+      "name": "ItemReceivedUI",
+      "purpose": "Shows a brief item-received notification and fades it out."
+    },
+    {
+      "name": "PlayerInventoryUIBootstrap",
+      "purpose": "Project-level sample adapter for PlayerManager/Character/GameManager. Can be replaced with direct InventoryUIFactory integration."
+    },
+    {
+      "name": "RuntimeInventoryUIBuilder",
+      "purpose": "Creates a drag ghost and runtime context-menu hierarchy."
+    }
+  ],
+  "usageExamples": {
+    "add": "var remainder = inventory.AddItem(new ItemStack(potionDefinition, 7));",
+    "remove": "var removed = inventory.RemoveItem(coinDefinition, 10);",
+    "query": "var total = inventory.CountItem(potionDefinition);",
+    "split": "var split = inventory.SplitStack(sourceIndex, 2);",
+    "move": "var moved = inventory.TryMove(sourceIndex, targetIndex);",
+    "transfer": "var transferred = inventory.TransferTo(chestInventory, sourceIndex, 5);",
+    "events": "inventory.OnItemAdded.AddListener(stack => Debug.Log($\"Added {stack}\"));"
+  },
+  "importantBehavior": [
+    "AddItem returns a remainder, not a success bool. Zero means everything fit.",
+    "RemoveItem is transactional/all-or-nothing; RemoveFromSlot clamps to the available slot quantity.",
+    "TransferTo is partial; it adds to target first, then removes only accepted units from source.",
+    "Move and split mutate slots and trigger ItemSlot.OnItemChanged but do not raise inventory OnItemAdded/OnItemRemoved events.",
+    "AutoStack also triggers slot-level change events; it does not raise inventory add/remove events.",
+    "Clear and ClearSlot are removals and now raise OnItemRemoved.",
+    "CanFit and all query methods are non-mutating except that missing serialized slot instances are normalized.",
+    "UI sample's sell/drop/discard actions remove the stack and then raise their corresponding game-specific events. Currency/world spawning remain external responsibilities."
+  ],
+  "compatibilityNotes": [
+    "Unity package manifest target: Unity 6000.6.",
+    "Runtime namespace and assembly: LOGIYGames.Inventory.",
+    "Existing serialized field names slots, item, Data, Amount are retained.",
+    "ItemDefinition Id is not automatically generated; save systems must supply stable unique IDs.",
+    "No .meta files are modified."
+  ]
+}

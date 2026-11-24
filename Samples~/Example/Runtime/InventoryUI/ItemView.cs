@@ -1,33 +1,34 @@
-using Alchemy.Inspector;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace LOGIYGames.Inventory
 {
+    /// <summary>Displays an item icon and stack quantity. No inventory state is stored in this view.</summary>
     public class ItemView : MonoBehaviour
     {
-        [SerializeField, Required] TextMeshProUGUI stackSize;
-        [SerializeField, Required] Image icon;
-        [SerializeField, Required] Sprite missingIconSprite;
+        [SerializeField] private TextMeshProUGUI stackSize;
+        [SerializeField] private Image icon;
+        [SerializeField] private Sprite missingIconSprite;
 
-        ItemStack item;
-
+        /// <summary>Image used to display the current item's icon.</summary>
         public Image Icon => icon;
 
+        /// <summary>Updates the image and quantity label from a stack value.</summary>
         public void SetItem(ItemStack value)
         {
-            item = value;
-            if (item.Data == null)
+            if (icon == null || stackSize == null)
             {
-                icon.sprite = missingIconSprite;
-                stackSize.enabled = false;
-                stackSize.text = string.Empty;
+                Debug.LogWarning("ItemView requires an Image and TextMeshProUGUI reference.", this);
                 return;
             }
-            icon.sprite = item.Data.Icon ?? missingIconSprite;
-            stackSize.enabled = item.Amount > 1;
-            stackSize.text = item.Amount.ToString();
+
+            icon.sprite = value.IsEmpty
+                ? missingIconSprite
+                : value.Data.Icon != null ? value.Data.Icon : missingIconSprite;
+
+            stackSize.enabled = !value.IsEmpty && value.Amount > 1;
+            stackSize.text = value.IsEmpty ? string.Empty : value.Amount.ToString();
         }
     }
 }

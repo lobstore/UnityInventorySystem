@@ -4,15 +4,20 @@ using UnityEngine.EventSystems;
 
 namespace LOGIYGames.Inventory
 {
+    /// <summary>
+    /// Unity UI event adapter for an inventory slot. It forwards drag, drop and pointer events
+    /// to its owner and refreshes the ItemView when the slot model changes.
+    /// </summary>
     public class ItemSlotView : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler,
         IDropHandler, IPointerClickHandler
     {
-        [SerializeField] ItemView ItemView;
+        [SerializeField] private ItemView itemView;
 
-        ItemSlotPresenter presenter;
-        ItemSlot ItemSlot;
+        private ItemSlotPresenter presenter;
+        private ItemSlot itemSlot;
 
+        /// <summary>Presenter currently bound to this view.</summary>
         public ItemSlotPresenter Presenter => presenter;
 
         public event Action<ItemSlotView, PointerEventData> BeginDragEvent;
@@ -22,45 +27,62 @@ namespace LOGIYGames.Inventory
         public event Action<ItemSlotView, PointerEventData> RightClickEvent;
         public event Action<ItemSlotView, PointerEventData> LeftClickEvent;
 
-        public void Bind(ItemSlotPresenter presenter)
+        /// <summary>Binds to a presenter and subscribes to its slot content-change event.</summary>
+        public void Bind(ItemSlotPresenter value)
         {
-            this.presenter = presenter;
-            ItemSlot = presenter.Slot;
+            Unbind();
+            presenter = value;
+            itemSlot = value != null ? value.Slot : null;
+
+            if (itemSlot != null)
+                itemSlot.OnItemChanged.AddListener(UpdateView);
+
             UpdateView();
-            presenter.Slot.OnItemChanged.AddListener(UpdateView);
         }
 
-        private void OnDestroy() => Unbind();
+        private void OnDestroy()
+        {
+            Unbind();
+        }
 
+        /// <summary>Unsubscribes from the current slot and clears local references.</summary>
         public void Unbind()
         {
-            if (presenter?.Slot != null)
-                presenter.Slot.OnItemChanged.RemoveListener(UpdateView);
+            if (itemSlot != null)
+                itemSlot.OnItemChanged.RemoveListener(UpdateView);
+
+            itemSlot = null;
+            presenter = null;
         }
 
-        private void UpdateView() => ItemView.SetItem(ItemSlot.Item);
-
-        public void OnBeginDrag(PointerEventData e)
+        private void UpdateView()
         {
-            if (ItemSlot == null || ItemSlot.IsEmpty)
+            if (itemView != null)
+                itemView.SetItem(itemSlot != null ? itemSlot.Item : default);
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (itemSlot == null || itemSlot.IsEmpty)
             {
-                e.pointerDrag = null;
+                if (eventData != null) eventData.pointerDrag = null;
                 return;
             }
-            BeginDragEvent?.Invoke(this, e);
+
+            BeginDragEvent?.Invoke(this, eventData);
         }
 
-        public void OnDrag(PointerEventData e) => DragEvent?.Invoke(this, e);
-        public void OnEndDrag(PointerEventData e) => EndDragEvent?.Invoke(this, e);
-        public void OnDrop(PointerEventData e) => DropEvent?.Invoke(this, e);
+        public void OnDrag(PointerEventData eventData) => DragEvent?.Invoke(this, eventData);
+        public void OnEndDrag(PointerEventData eventData) => EndDragEvent?.Invoke(this, eventData);
+        public void OnDrop(PointerEventData eventData) => DropEvent?.Invoke(this, eventData);
 
-        public void OnPointerClick(PointerEventData e)
+        public void OnPointerClick(PointerEventData eventData)
         {
-            if (e.dragging) return;
-            if (e.button == PointerEventData.InputButton.Left)
-                LeftClickEvent?.Invoke(this, e);
-            else if (e.button == PointerEventData.InputButton.Right)
-                RightClickEvent?.Invoke(this, e);
+            if (eventData == null || eventData.dragging) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+                LeftClickEvent?.Invoke(this, eventData);
+            else if (eventData.button == PointerEventData.InputButton.Right)
+                RightClickEvent?.Invoke(this, eventData);
         }
     }
 }

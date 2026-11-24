@@ -5,6 +5,7 @@ using UnityEngine.UI;
 
 namespace LOGIYGames
 {
+    /// <summary>Reusable context menu that pools buttons for a list of inventory actions.</summary>
     public class ItemContextMenu : MonoBehaviour
     {
         [SerializeField] private RectTransform panel;
@@ -12,54 +13,60 @@ namespace LOGIYGames
         [SerializeField] private Button buttonPrefab;
         [SerializeField] private Button backdropButton;
 
-        private readonly List<Button> _pool = new();
+        private readonly List<Button> pool = new List<Button>();
 
         private void Awake()
         {
-            if (backdropButton != null)
-            {
-                backdropButton.onClick.AddListener(Hide);
-                backdropButton.gameObject.SetActive(false);
-            }
+            ConfigureBackdrop();
             if (panel != null) panel.gameObject.SetActive(false);
         }
 
-        /// <summary>Инициализация для рантайм-создаваемого меню.</summary>
-        public void Setup(RectTransform panel, RectTransform buttonsRoot, Button buttonPrefab, Button backdropButton)
+        /// <summary>Assigns references for a context menu generated at runtime.</summary>
+        public void Setup(RectTransform menuPanel, RectTransform menuButtonsRoot, Button menuButtonPrefab, Button menuBackdropButton)
         {
-            this.panel = panel;
-            this.buttonsRoot = buttonsRoot;
-            this.buttonPrefab = buttonPrefab;
-            this.backdropButton = backdropButton;
-
             if (backdropButton != null)
-            {
-                backdropButton.onClick.AddListener(Hide);
-                backdropButton.gameObject.SetActive(false);
-            }
+                backdropButton.onClick.RemoveListener(Hide);
+
+            panel = menuPanel;
+            buttonsRoot = menuButtonsRoot;
+            buttonPrefab = menuButtonPrefab;
+            backdropButton = menuBackdropButton;
+
+            ConfigureBackdrop();
             if (panel != null) panel.gameObject.SetActive(false);
         }
 
-        public void Show(Vector2 screenPos, IReadOnlyList<ContextMenuAction> actions)
+        private void ConfigureBackdrop()
         {
-            if (panel == null || actions == null || actions.Count == 0) return;
+            if (backdropButton == null) return;
+            backdropButton.onClick.RemoveListener(Hide);
+            backdropButton.onClick.AddListener(Hide);
+            backdropButton.gameObject.SetActive(false);
+        }
 
-            for (int i = actions.Count; i < _pool.Count; i++)
-                _pool[i].gameObject.SetActive(false);
+        /// <summary>Displays the supplied actions near a screen-space pointer position.</summary>
+        public void Show(Vector2 screenPosition, IReadOnlyList<ContextMenuAction> actions)
+        {
+            if (panel == null || buttonsRoot == null || buttonPrefab == null || actions == null || actions.Count == 0)
+                return;
 
-            for (int i = 0; i < actions.Count; i++)
+            for (var i = actions.Count; i < pool.Count; i++)
+                if (pool[i] != null) pool[i].gameObject.SetActive(false);
+
+            for (var i = 0; i < actions.Count; i++)
             {
-                var btn = GetOrCreate(i);
+                var button = GetOrCreate(i);
+                if (button == null) continue;
+
                 var action = actions[i];
+                button.gameObject.SetActive(true);
+                button.interactable = action.Interactable;
 
-                btn.gameObject.SetActive(true);
-                btn.interactable = action.Interactable;
-
-                var label = btn.GetComponentInChildren<TMP_Text>();
+                var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null) label.text = action.Label;
 
-                btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() =>
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() =>
                 {
                     Hide();
                     action.Callback?.Invoke();
@@ -67,36 +74,43 @@ namespace LOGIYGames
             }
 
             if (backdropButton != null) backdropButton.gameObject.SetActive(true);
-
             panel.gameObject.SetActive(true);
             panel.SetAsLastSibling();
             if (backdropButton != null) backdropButton.transform.SetAsFirstSibling();
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel);
-
             panel.pivot = new Vector2(0f, 1f);
+
             var size = panel.rect.size;
-            float x = Mathf.Clamp(screenPos.x, 0f, Screen.width - size.x);
-            float y = Mathf.Clamp(screenPos.y, size.y, Screen.height);
+            var x = Mathf.Clamp(screenPosition.x, 0f, Mathf.Max(0f, Screen.width - size.x));
+            var y = Mathf.Clamp(screenPosition.y, size.y, Screen.height);
             panel.position = new Vector3(x, y, 0f);
         }
 
+        /// <summary>Hides the menu and its backdrop.</summary>
         public void Hide()
         {
-            if (panel == null || !panel.gameObject.activeSelf) return;
-            panel.gameObject.SetActive(false);
+            if (panel != null) panel.gameObject.SetActive(false);
             if (backdropButton != null) backdropButton.gameObject.SetActive(false);
         }
 
         private Button GetOrCreate(int index)
         {
-            while (_pool.Count <= index)
+            while (pool.Count <= index)
             {
                 var clone = Instantiate(buttonPrefab, buttonsRoot);
+                if (clone == null) return null;
                 clone.gameObject.SetActive(false);
-                _pool.Add(clone);
+                pool.Add(clone);
             }
-            return _pool[index];
+
+            return pool[index];
+        }
+
+        private void OnDestroy()
+        {
+            if (backdropButton != null)
+                backdropButton.onClick.RemoveListener(Hide);
         }
     }
 }
