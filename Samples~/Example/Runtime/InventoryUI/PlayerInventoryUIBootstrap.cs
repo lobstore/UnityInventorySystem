@@ -5,98 +5,102 @@ using UnityEngine.UI;
 
 namespace LOGIYGames.Inventory
 {
+    /// <summary>
+    /// Connects the active character's InventoryController to the sample inventory UI.
+    /// Character and GameManager references are project-level integration points.
+    /// </summary>
     public class PlayerInventoryUIBootstrap : MonoBehaviour
     {
         [SerializeField] private GameObject inventorySlotPrefab;
         [SerializeField] private RectTransform inventoryContainer;
         [SerializeField] private CanvasGroup group;
 
-        [Header("Drag ghost (optional — auto-created if null)")]
+        [Header("Drag ghost (optional - auto-created if null)")]
         [SerializeField] private Image dragGhost;
         [SerializeField] private TMP_Text dragGhostAmount;
 
-        [Header("Context menu (optional — auto-created if null)")]
+        [Header("Context menu (optional - auto-created if null)")]
         [SerializeField] private ItemContextMenu contextMenu;
 
         [SerializeField] private ItemReceivedUI itemReceivedUI;
 
         private GameObject runtimeUIRoot;
-
-        private InventoryUIFactory Factory;
+        private InventoryUIFactory factory;
         private InventoryController currentInventory;
 
+        /// <summary>Whether the inventory panel is currently visible and interactive.</summary>
         public bool IsInventoryOpened { get; private set; }
 
         private void Awake()
         {
             EnsureRuntimeUI();
-
             if (PlayerManager.Instance != null)
                 PlayerManager.Instance.OnCharacterChanged.AddListener(UpdateInventoryUI);
         }
 
-        /// <summary>Подставляет дефолтные объекты для всех неназначенных ссылок.</summary>
         private void EnsureRuntimeUI()
         {
-            bool needGhost = dragGhost == null;
-            bool needMenu = contextMenu == null;
+            var needGhost = dragGhost == null;
+            var needMenu = contextMenu == null;
             if (!needGhost && !needMenu) return;
 
-            // Ищем root canvas, чтобы созданные объекты были поверх UI.
             var canvas = inventoryContainer != null
                 ? inventoryContainer.GetComponentInParent<Canvas>()
                 : GetComponentInParent<Canvas>();
-            Transform uiParent = canvas != null ? canvas.rootCanvas.transform : transform;
+            var uiParent = canvas != null ? canvas.rootCanvas.transform : transform;
 
             runtimeUIRoot = new GameObject("InventoryRuntimeUI", typeof(RectTransform));
             runtimeUIRoot.transform.SetParent(uiParent, false);
-            var rt = runtimeUIRoot.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
+            var rect = runtimeUIRoot.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
 
             if (needGhost)
-                dragGhost = RuntimeInventoryUIBuilder.CreateDragGhost(
-                    runtimeUIRoot.transform, out dragGhostAmount);
-
+                dragGhost = RuntimeInventoryUIBuilder.CreateDragGhost(runtimeUIRoot.transform, out dragGhostAmount);
             if (needMenu)
                 contextMenu = RuntimeInventoryUIBuilder.CreateContextMenu(runtimeUIRoot.transform);
 
-            // Ghost должен быть ниже меню, если оба в runtimeUIRoot.
             if (needGhost && !needMenu) dragGhost.transform.SetAsFirstSibling();
             if (!needGhost && needMenu) contextMenu.transform.SetAsLastSibling();
         }
 
-        private void UpdateInventoryUI(Character.Actor newChar)
+        private void UpdateInventoryUI(Character.Actor newCharacter)
         {
             if (currentInventory != null)
                 currentInventory.OnItemAdded.RemoveListener(ShowReceivedItem);
 
-            Factory?.Dispose();
-            Factory = null;
+            factory?.Dispose();
+            factory = null;
 
-            currentInventory = newChar != null ? newChar.GetComponent<InventoryController>() : null;
+            currentInventory = newCharacter != null
+                ? newCharacter.GetComponent<InventoryController>()
+                : null;
             if (currentInventory == null) return;
 
             currentInventory.OnItemAdded.AddListener(ShowReceivedItem);
 
-            Factory = new InventoryUIFactory(
-                currentInventory,
-                inventoryContainer,
-                inventorySlotPrefab,
-                dragGhost,
-                dragGhostAmount,
-                contextMenu);
+            if (inventoryContainer == null || inventorySlotPrefab == null)
+            {
+                Debug.LogWarning("Inventory UI requires an inventory container and slot prefab.", this);
+                return;
+            }
 
-            Factory.Create();
+            factory = new InventoryUIFactory(currentInventory, inventoryContainer, inventorySlotPrefab,
+                dragGhost, dragGhostAmount, contextMenu);
+            factory.Create();
         }
 
-        private void ShowReceivedItem(ItemStack item) => itemReceivedUI.Show(item);
+        private void ShowReceivedItem(ItemStack item)
+        {
+            if (itemReceivedUI != null) itemReceivedUI.Show(item);
+        }
 
         private void Update()
         {
-            if (GameManager.Instance.UIInput.InventoryPressed)
+            // UIInput is intentionally not null-compared: its project-defined type may be a struct.
+            if (GameManager.Instance != null && GameManager.Instance.UIInput.InventoryPressed)
                 IsInventoryOpened = !IsInventoryOpened;
 
             if (group != null)
@@ -113,12 +117,11 @@ namespace LOGIYGames.Inventory
         {
             if (PlayerManager.Instance != null)
                 PlayerManager.Instance.OnCharacterChanged.RemoveListener(UpdateInventoryUI);
-
             if (currentInventory != null)
                 currentInventory.OnItemAdded.RemoveListener(ShowReceivedItem);
 
-            Factory?.Dispose();
-
+            factory?.Dispose();
+            factory = null;
             if (runtimeUIRoot != null) Destroy(runtimeUIRoot);
         }
     }
